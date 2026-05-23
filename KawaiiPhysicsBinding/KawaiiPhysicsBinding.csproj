@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <OutputType>Library</OutputType>
     <TargetFramework>net8.0</TargetFramework>
 
     <AssemblyName>KawaiiPhysicsBinding</AssemblyName>
@@ -9,10 +9,13 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
 
-    <!-- Managed/JIT executable. Do NOT NativeAOT this. -->
+    <!-- Managed/JIT DLL. Do NOT NativeAOT this; UAssetAPI needs reflection. -->
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
     <SelfContained>true</SelfContained>
     <PublishAot>false</PublishAot>
     <PublishSingleFile>false</PublishSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
+    <UseAppHost>false</UseAppHost>
 
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>

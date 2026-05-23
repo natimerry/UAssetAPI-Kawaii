@@ -1,6 +1,5 @@
+using KawaiiPhysicsBinding;
 using UAssetAPI;
-using UAssetAPI.UnrealTypes;
-using UAssetAPI.Unversioned;
 
 internal static class Program
 {
@@ -103,18 +102,7 @@ internal static class Program
 
         try
         {
-            Console.Error.WriteLine($"[KawaiiPhysicsBinding] Loading asset: {uassetPath}");
-            Console.Error.WriteLine($"[KawaiiPhysicsBinding] USMAP path: {(string.IsNullOrWhiteSpace(usmapPath) ? "null" : usmapPath)}");
-
-            var asset = LoadAssetLikeCli(uassetPath, usmapPath);
-
-            var result = KawaiiPhysicsLegacyPorter.PortLegacyAnimNodes(asset, options);
-
-            if (result.PortedAnimNodes > 0)
-            {
-                asset.Write(uassetPath);
-                Console.Error.WriteLine($"[KawaiiPhysicsBinding] Patched: {uassetPath}");
-            }
+            var result = KawaiiPhysicsBridge.PortAsset(usmapPath, uassetPath, options, Console.Error);
 
             Console.Error.WriteLine(
                 $"[KawaiiPhysicsBinding] visited={result.VisitedAnimNodes} ported={result.PortedAnimNodes} skipped_existing={result.SkippedExistingChains}"
@@ -131,58 +119,6 @@ internal static class Program
             Console.Error.WriteLine("[KawaiiPhysicsBinding] failed:");
             Console.Error.WriteLine(ex.ToString());
             return 1;
-        }
-    }
-
-    private static UAsset LoadAssetLikeCli(string uassetPath, string? usmapPath)
-    {
-        try
-        {
-            var asset = new UAsset(uassetPath, EngineVersion.VER_UE5_3)
-            {
-                UseSeparateBulkDataFiles = true
-            };
-
-            Console.Error.WriteLine(
-                $"[KawaiiPhysicsBinding] Loaded without mappings: HasUnversionedProperties={asset.HasUnversionedProperties}, Exports={asset.Exports.Count}"
-            );
-
-            return asset;
-        }
-        catch (Exception noMappingsEx)
-        {
-            Console.Error.WriteLine("[KawaiiPhysicsBinding] No-mapping load failed:");
-            Console.Error.WriteLine(noMappingsEx.ToString());
-
-            if (string.IsNullOrWhiteSpace(usmapPath))
-            {
-                throw;
-            }
-        }
-
-        try
-        {
-            Console.Error.WriteLine($"[KawaiiPhysicsBinding] Retrying with USMAP: {usmapPath}");
-
-            var mappings = new Usmap(usmapPath);
-
-            var asset = new UAsset(uassetPath, EngineVersion.VER_UE5_3, mappings)
-            {
-                UseSeparateBulkDataFiles = true
-            };
-
-            Console.Error.WriteLine(
-                $"[KawaiiPhysicsBinding] Loaded with mappings: HasUnversionedProperties={asset.HasUnversionedProperties}, Exports={asset.Exports.Count}"
-            );
-
-            return asset;
-        }
-        catch (Exception mappedEx)
-        {
-            throw new InvalidOperationException(
-                $"Failed to load asset with or without mappings: {uassetPath}",
-                mappedEx
-            );
         }
     }
 
