@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Library</OutputType>
+    <OutputType Condition="'$(KawaiiPhysicsBindingSelfContained)' == 'true'">Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
 
     <AssemblyName>KawaiiPhysicsBinding</AssemblyName>
@@ -11,11 +12,14 @@
 
     <!-- Managed/JIT DLL. Do NOT NativeAOT this; UAssetAPI needs reflection. -->
     <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
-    <SelfContained>true</SelfContained>
+    <SelfContained>false</SelfContained>
+    <SelfContained Condition="'$(KawaiiPhysicsBindingSelfContained)' == 'true'">true</SelfContained>
+    <RollForward>Major</RollForward>
     <PublishAot>false</PublishAot>
     <PublishSingleFile>false</PublishSingleFile>
     <PublishTrimmed>false</PublishTrimmed>
     <UseAppHost>false</UseAppHost>
+    <UseAppHost Condition="'$(KawaiiPhysicsBindingSelfContained)' == 'true'">true</UseAppHost>
 
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
