@@ -12,10 +12,12 @@ public sealed class KawaiiPhysicsLegacyPortResult
     public int VisitedAnimNodes { get; internal set; }
     public int PortedAnimNodes { get; internal set; }
     public int SkippedExistingChains { get; internal set; }
+    public int PatchedDefaultHiddenMaterialLods { get; internal set; }
 }
 
 public sealed class KawaiiPhysicsPortOptions
 {
+    public bool PatchKawaiiPhysics { get; set; } = true;
     public bool ForceRebuildChain0 { get; set; }
     public bool? UseCurves { get; set; }
     public float? WorldDampingLocation { get; set; }
@@ -34,6 +36,8 @@ public sealed class KawaiiPhysicsPortOptions
     public bool? UseWorldSpaceGravity { get; set; }
     public bool? UseProjectGravity { get; set; }
     public FVector? GravityVector { get; set; }
+    public bool PatchDefaultHiddenMaterials { get; set; }
+    public IReadOnlyList<ulong> DefaultHiddenMaterialBitmaps { get; set; }
 }
 
 public static class KawaiiPhysicsLegacyPorter
@@ -61,11 +65,19 @@ public static class KawaiiPhysicsLegacyPorter
         var result = new KawaiiPhysicsLegacyPortResult();
         if (asset.Exports == null) return result;
 
+        HiddenMaterialsResult hiddenMaterials = null;
+        if (options.PatchDefaultHiddenMaterials && !HasDefaultHiddenMaterialBitmapOverride(options))
+        {
+            hiddenMaterials = HiddenMaterialsReader.ReadFromAsset(asset);
+        }
+
         foreach (Export export in asset.Exports)
         {
             if (export is not NormalExport normalExport || normalExport.Data == null) continue;
 
-            bool mutated = PortPropertyList(asset, normalExport.Data, options, result);
+            bool mutated = options.PatchKawaiiPhysics
+                && PortPropertyList(asset, normalExport.Data, options, result);
+            mutated |= PatchDefaultHiddenMaterials(asset, normalExport, options, hiddenMaterials, result);
             if (mutated)
             {
                 normalExport.OriginalUnversionedHeader = null;
@@ -74,6 +86,38 @@ public static class KawaiiPhysicsLegacyPorter
         }
 
         return result;
+    }
+
+    private static bool PatchDefaultHiddenMaterials(
+        UAsset asset,
+        NormalExport export,
+        KawaiiPhysicsPortOptions options,
+        HiddenMaterialsResult hiddenMaterials,
+        KawaiiPhysicsLegacyPortResult result)
+    {
+        int patched = 0;
+        if (HasDefaultHiddenMaterialBitmapOverride(options))
+        {
+            patched = HiddenMaterialsReader.InjectBitmapsIntoLodInfo(
+                export,
+                options.DefaultHiddenMaterialBitmaps,
+                asset);
+        }
+        else if (options.PatchDefaultHiddenMaterials)
+        {
+            patched = hiddenMaterials?.FoundUserData == true
+                ? HiddenMaterialsReader.InjectIntoLodInfo(export, hiddenMaterials, asset)
+                : 0;
+        }
+
+        if (patched <= 0) return false;
+        result.PatchedDefaultHiddenMaterialLods += patched;
+        return true;
+    }
+
+    private static bool HasDefaultHiddenMaterialBitmapOverride(KawaiiPhysicsPortOptions options)
+    {
+        return options.DefaultHiddenMaterialBitmaps != null && options.DefaultHiddenMaterialBitmaps.Count > 0;
     }
 
     private static bool PortPropertyList(UAsset asset, List<PropertyData> properties, KawaiiPhysicsPortOptions options, KawaiiPhysicsLegacyPortResult result)

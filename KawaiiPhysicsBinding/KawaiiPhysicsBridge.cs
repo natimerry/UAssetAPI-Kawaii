@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using UAssetAPI;
 using UAssetAPI.UnrealTypes;
 using UAssetAPI.Unversioned;
@@ -35,21 +36,59 @@ internal static class KawaiiPhysicsBridge
 
         log?.WriteLine($"[KawaiiPhysicsBinding] Loading asset: {uassetPath}");
         log?.WriteLine($"[KawaiiPhysicsBinding] USMAP path: {(string.IsNullOrWhiteSpace(usmapPath) ? "null" : usmapPath)}");
+        if (!options.PatchKawaiiPhysics)
+        {
+            log?.WriteLine("[KawaiiPhysicsBinding] KawaiiPhysics port disabled");
+        }
+        if (options.DefaultHiddenMaterialBitmaps != null)
+        {
+            log?.WriteLine($"[KawaiiPhysicsBinding] DefaultHiddenMaterials bitmap override rows: {options.DefaultHiddenMaterialBitmaps.Count}");
+        }
+        else if (options.PatchDefaultHiddenMaterials)
+        {
+            log?.WriteLine("[KawaiiPhysicsBinding] DefaultHiddenMaterials carrier autodetect enabled");
+        }
 
         var asset = LoadAssetLikeCli(uassetPath, usmapPath, log);
         var result = KawaiiPhysicsLegacyPorter.PortLegacyAnimNodes(asset, options);
 
-        if (result.PortedAnimNodes > 0)
+        if (result.PortedAnimNodes > 0 || result.PatchedDefaultHiddenMaterialLods > 0)
         {
             asset.Write(uassetPath);
             log?.WriteLine($"[KawaiiPhysicsBinding] Patched: {uassetPath}");
         }
 
         log?.WriteLine(
-            $"[KawaiiPhysicsBinding] visited={result.VisitedAnimNodes} ported={result.PortedAnimNodes} skipped_existing={result.SkippedExistingChains}"
+            $"[KawaiiPhysicsBinding] visited={result.VisitedAnimNodes} ported={result.PortedAnimNodes} skipped_existing={result.SkippedExistingChains} default_hidden_material_lods={result.PatchedDefaultHiddenMaterialLods}"
         );
 
         return result;
+    }
+
+    public static IReadOnlyList<ulong> ParseDefaultHiddenMaterialBitmaps(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new FormatException("DefaultHiddenMaterials bitmap list was empty");
+        }
+
+        var bitmaps = new List<ulong>();
+        foreach (string rawPart in value.Split(',', ';', '|'))
+        {
+            string part = rawPart.Trim();
+            if (part.Length == 0) continue;
+
+            bitmaps.Add(part.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                ? ulong.Parse(part[2..], NumberStyles.HexNumber, CultureInfo.InvariantCulture)
+                : ulong.Parse(part, CultureInfo.InvariantCulture));
+        }
+
+        if (bitmaps.Count == 0)
+        {
+            throw new FormatException("DefaultHiddenMaterials bitmap list was empty");
+        }
+
+        return bitmaps;
     }
 
     private static UAsset LoadAssetLikeCli(string uassetPath, string? usmapPath, TextWriter? log)

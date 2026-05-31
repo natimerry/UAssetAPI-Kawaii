@@ -11,6 +11,7 @@ public struct KawaiiPhysicsPortNativeResult
     public int VisitedAnimNodes;
     public int PortedAnimNodes;
     public int SkippedExistingChains;
+    public int PatchedDefaultHiddenMaterialLods;
 }
 
 public static unsafe class NativeExports
@@ -20,6 +21,8 @@ public static unsafe class NativeExports
         byte* usmapPathUtf8,
         byte* uassetPathUtf8,
         int forceRebuild,
+        int portKawaiiPhysics,
+        byte* defaultHiddenMaterialBitmapsUtf8,
         KawaiiPhysicsPortNativeResult* result,
         byte* errorBuffer,
         int errorBufferLength)
@@ -35,8 +38,19 @@ public static unsafe class NativeExports
 
             var options = new KawaiiPhysicsPortOptions
             {
+                PatchKawaiiPhysics = portKawaiiPhysics != 0,
                 ForceRebuildChain0 = forceRebuild != 0
             };
+            var defaultHiddenMaterialBitmaps = PtrToString(defaultHiddenMaterialBitmapsUtf8);
+            if (defaultHiddenMaterialBitmaps != null)
+            {
+                options.PatchDefaultHiddenMaterials = true;
+                if (!string.IsNullOrWhiteSpace(defaultHiddenMaterialBitmaps))
+                {
+                    options.DefaultHiddenMaterialBitmaps =
+                        KawaiiPhysicsBridge.ParseDefaultHiddenMaterialBitmaps(defaultHiddenMaterialBitmaps);
+                }
+            }
 
             var portResult = KawaiiPhysicsBridge.PortAsset(
                 PtrToString(usmapPathUtf8),
@@ -48,6 +62,7 @@ public static unsafe class NativeExports
                 result->VisitedAnimNodes = portResult.VisitedAnimNodes;
                 result->PortedAnimNodes = portResult.PortedAnimNodes;
                 result->SkippedExistingChains = portResult.SkippedExistingChains;
+                result->PatchedDefaultHiddenMaterialLods = portResult.PatchedDefaultHiddenMaterialLods;
             }
 
             return 0;

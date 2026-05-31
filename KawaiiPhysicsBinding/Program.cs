@@ -23,8 +23,10 @@ internal static class Program
     private static int Usage()
     {
         Console.Error.WriteLine("Usage:");
-        Console.Error.WriteLine("  KawaiiPhysicsBinding port [usmap_path] <uasset_path> [--force-rebuild]");
-        Console.Error.WriteLine("  KawaiiPhysicsBinding port <uasset_path> [--force-rebuild]");
+        Console.Error.WriteLine("  KawaiiPhysicsBinding port [usmap_path] <uasset_path> [--force-rebuild] [--patch-default-hidden-mats [bitmap_csv]]");
+        Console.Error.WriteLine("  KawaiiPhysicsBinding port <uasset_path> [--force-rebuild] [--patch-default-hidden-mats [bitmap_csv]]");
+        Console.Error.WriteLine("    --patch-default-hidden-mats reads LODHiddenMaterials carrier data.");
+        Console.Error.WriteLine("    bitmap_csv or --default-hidden-material-bitmaps overrides carrier data.");
         return 2;
     }
 
@@ -46,6 +48,33 @@ internal static class Program
                     case "--force-rebuild":
                     case "--force-rebuild-chain0":
                         options.ForceRebuildChain0 = true;
+                        break;
+
+                    case "--no-kawaii-physics":
+                        options.PatchKawaiiPhysics = false;
+                        break;
+
+                    case "--patch-default-hidden-mats":
+                        options.PatchDefaultHiddenMaterials = true;
+                        if (i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal))
+                        {
+                            string bitmapArg = args[++i];
+                            if (!string.IsNullOrWhiteSpace(bitmapArg))
+                            {
+                                options.DefaultHiddenMaterialBitmaps = KawaiiPhysicsBridge.ParseDefaultHiddenMaterialBitmaps(bitmapArg);
+                            }
+                        }
+                        break;
+
+                    case "--default-hidden-material-bitmaps":
+                        if (i + 1 >= args.Length)
+                        {
+                            Console.Error.WriteLine($"[KawaiiPhysicsBinding] Missing value for {arg}");
+                            return 2;
+                        }
+
+                        options.PatchDefaultHiddenMaterials = true;
+                        options.DefaultHiddenMaterialBitmaps = KawaiiPhysicsBridge.ParseDefaultHiddenMaterialBitmaps(args[++i]);
                         break;
 
                     default:
@@ -111,6 +140,7 @@ internal static class Program
             Console.Error.WriteLine($"Visited AnimNodes: {result.VisitedAnimNodes}");
             Console.Error.WriteLine($"Ported AnimNodes: {result.PortedAnimNodes}");
             Console.Error.WriteLine($"Skipped Existing Chains: {result.SkippedExistingChains}");
+            Console.Error.WriteLine($"Patched DefaultHiddenMaterials LODs: {result.PatchedDefaultHiddenMaterialLods}");
 
             return 0;
         }
