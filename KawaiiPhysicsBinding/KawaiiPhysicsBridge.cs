@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Text.Json;
 using UAssetAPI;
 using UAssetAPI.UnrealTypes;
 using UAssetAPI.Unversioned;
@@ -89,6 +90,234 @@ internal static class KawaiiPhysicsBridge
         }
 
         return bitmaps;
+    }
+
+    public static void ApplyOptionsJson(KawaiiPhysicsPortOptions options, string? json)
+    {
+        if (options == null || string.IsNullOrWhiteSpace(json)) return;
+
+        using var document = JsonDocument.Parse(json);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new FormatException("KawaiiPhysics options JSON must be an object");
+        }
+
+        foreach (var property in document.RootElement.EnumerateObject())
+        {
+            string key = NormalizeOptionKey(property.Name);
+            var value = property.Value;
+
+            switch (key)
+            {
+                case "usecurves":
+                    options.UseCurves = ReadBool(value, property.Name);
+                    break;
+                case "worlddampinglocation":
+                    options.WorldDampingLocation = ReadFloat(value, property.Name);
+                    break;
+                case "worlddampingrotation":
+                    options.WorldDampingRotation = ReadFloat(value, property.Name);
+                    break;
+                case "stiffness":
+                    options.Stiffness = ReadFloat(value, property.Name);
+                    break;
+                case "damping":
+                    options.Damping = ReadFloat(value, property.Name);
+                    break;
+                case "gravityscale":
+                    options.GravityScale = ReadFloat(value, property.Name);
+                    break;
+                case "simulationspace":
+                    options.SimulationSpace = ReadString(value, property.Name);
+                    break;
+                case "teleportdistancethreshold":
+                    options.TeleportDistanceThreshold = ReadFloat(value, property.Name);
+                    break;
+                case "teleportrotationthreshold":
+                    options.TeleportRotationThreshold = ReadFloat(value, property.Name);
+                    break;
+                case "enablewarmup":
+                    options.EnableWarmUp = ReadBool(value, property.Name);
+                    break;
+                case "warmupframes":
+                    options.WarmUpFrames = ReadInt(value, property.Name);
+                    break;
+                case "clearcurvedata":
+                    options.ClearCurveData = ReadBool(value, property.Name);
+                    break;
+                case "clearexternalforces":
+                    options.ClearExternalForces = ReadBool(value, property.Name);
+                    break;
+                case "disablewind":
+                    options.DisableWind = ReadBool(value, property.Name);
+                    break;
+                case "useworldspacegravity":
+                    options.UseWorldSpaceGravity = ReadBool(value, property.Name);
+                    break;
+                case "useprojectgravity":
+                    options.UseProjectGravity = ReadBool(value, property.Name);
+                    break;
+                case "gravityvector":
+                    options.GravityVector = ReadVector(value, property.Name);
+                    break;
+                case "curves":
+                    options.CurveOverrides = ReadCurves(value, property.Name);
+                    break;
+            }
+        }
+    }
+
+    private static string NormalizeOptionKey(string value)
+    {
+        return value.Trim()
+            .Replace("_", string.Empty, StringComparison.Ordinal)
+            .Replace("-", string.Empty, StringComparison.Ordinal)
+            .Replace(" ", string.Empty, StringComparison.Ordinal)
+            .ToLowerInvariant();
+    }
+
+    private static bool ReadBool(JsonElement value, string name)
+    {
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => throw new FormatException($"{name} must be a boolean")
+        };
+    }
+
+    private static float ReadFloat(JsonElement value, string name)
+    {
+        if (value.ValueKind != JsonValueKind.Number || !value.TryGetSingle(out float result))
+        {
+            throw new FormatException($"{name} must be a number");
+        }
+        return result;
+    }
+
+    private static int ReadInt(JsonElement value, string name)
+    {
+        if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out int result))
+        {
+            throw new FormatException($"{name} must be an integer");
+        }
+        return result;
+    }
+
+    private static string ReadString(JsonElement value, string name)
+    {
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            throw new FormatException($"{name} must be a string");
+        }
+        return value.GetString() ?? string.Empty;
+    }
+
+    private static FVector ReadVector(JsonElement value, string name)
+    {
+        if (value.ValueKind != JsonValueKind.Object)
+        {
+            throw new FormatException($"{name} must be an object with x, y, and z fields");
+        }
+
+        double? x = null;
+        double? y = null;
+        double? z = null;
+        foreach (var property in value.EnumerateObject())
+        {
+            switch (NormalizeOptionKey(property.Name))
+            {
+                case "x":
+                    x = ReadFloat(property.Value, $"{name}.x");
+                    break;
+                case "y":
+                    y = ReadFloat(property.Value, $"{name}.y");
+                    break;
+                case "z":
+                    z = ReadFloat(property.Value, $"{name}.z");
+                    break;
+            }
+        }
+
+        if (!x.HasValue || !y.HasValue || !z.HasValue)
+        {
+            throw new FormatException($"{name} must include x, y, and z fields");
+        }
+
+        return new FVector(x.Value, y.Value, z.Value);
+    }
+
+    private static IReadOnlyDictionary<string, IReadOnlyList<KawaiiPhysicsCurvePoint>> ReadCurves(JsonElement value, string name)
+    {
+        if (value.ValueKind != JsonValueKind.Object)
+        {
+            throw new FormatException($"{name} must be an object of curve-name arrays");
+        }
+
+        var output = new Dictionary<string, IReadOnlyList<KawaiiPhysicsCurvePoint>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var curve in value.EnumerateObject())
+        {
+            if (curve.Value.ValueKind != JsonValueKind.Array)
+            {
+                throw new FormatException($"{name}.{curve.Name} must be an array");
+            }
+
+            var points = new List<KawaiiPhysicsCurvePoint>();
+            foreach (var point in curve.Value.EnumerateArray())
+            {
+                if (point.ValueKind == JsonValueKind.Array)
+                {
+                    if (point.GetArrayLength() < 2)
+                    {
+                        throw new FormatException($"{name}.{curve.Name} array points must contain time and value");
+                    }
+
+                    points.Add(new KawaiiPhysicsCurvePoint
+                    {
+                        Time = ReadFloat(point[0], $"{name}.{curve.Name}.time"),
+                        Value = ReadFloat(point[1], $"{name}.{curve.Name}.value")
+                    });
+                    continue;
+                }
+
+                if (point.ValueKind != JsonValueKind.Object)
+                {
+                    throw new FormatException($"{name}.{curve.Name} points must be objects or [time,value] arrays");
+                }
+
+                float? time = null;
+                float? pointValue = null;
+                foreach (var field in point.EnumerateObject())
+                {
+                    switch (NormalizeOptionKey(field.Name))
+                    {
+                        case "time":
+                        case "x":
+                            time = ReadFloat(field.Value, $"{name}.{curve.Name}.time");
+                            break;
+                        case "value":
+                        case "y":
+                            pointValue = ReadFloat(field.Value, $"{name}.{curve.Name}.value");
+                            break;
+                    }
+                }
+
+                if (!time.HasValue || !pointValue.HasValue)
+                {
+                    throw new FormatException($"{name}.{curve.Name} object points must include time/value");
+                }
+
+                points.Add(new KawaiiPhysicsCurvePoint
+                {
+                    Time = time.Value,
+                    Value = pointValue.Value
+                });
+            }
+
+            output[curve.Name] = points;
+        }
+
+        return output;
     }
 
     private static UAsset LoadAssetLikeCli(string uassetPath, string? usmapPath, TextWriter? log)

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UAssetAPI.ExportTypes;
 using UAssetAPI.PropertyTypes.Objects;
 using UAssetAPI.PropertyTypes.Structs;
+using UAssetAPI.UnrealTypes.EngineEnums;
 using UAssetAPI.UnrealTypes;
 
 namespace UAssetAPI;
@@ -38,6 +39,13 @@ public sealed class KawaiiPhysicsPortOptions
     public FVector? GravityVector { get; set; }
     public bool PatchDefaultHiddenMaterials { get; set; }
     public IReadOnlyList<ulong> DefaultHiddenMaterialBitmaps { get; set; }
+    public IReadOnlyDictionary<string, IReadOnlyList<KawaiiPhysicsCurvePoint>> CurveOverrides { get; set; }
+}
+
+public sealed class KawaiiPhysicsCurvePoint
+{
+    public float Time { get; set; }
+    public float Value { get; set; }
 }
 
 public static class KawaiiPhysicsLegacyPorter
@@ -230,7 +238,7 @@ public static class KawaiiPhysicsLegacyPorter
         StructPropertyData physicsSettings = EnsureStruct(asset, chainPhysics, "PhysicsSettings", KawaiiPhysicsSettingsStruct);
         ApplyPhysicsDefaults(asset, physicsSettings, options);
         ApplyChainStartupStabilization(asset, chainPhysics, options);
-        ApplyCurveOptions(chainPhysics, options);
+        ApplyCurveOptions(asset, chainPhysics, options);
         if (options.UseCurves.HasValue)
         {
             Set(chainPhysics, "bUseCurve", Bool(asset, "bUseCurve", options.UseCurves.Value));
@@ -294,19 +302,29 @@ public static class KawaiiPhysicsLegacyPorter
         if (options.TeleportRotationThreshold.HasValue) SetFloat(asset, chainPhysics, "TeleportRotationThreshold", Math.Max(0.0f, options.TeleportRotationThreshold.Value));
     }
 
-    private static void ApplyCurveOptions(StructPropertyData chainPhysics, KawaiiPhysicsPortOptions options)
+    private static void ApplyCurveOptions(UAsset asset, StructPropertyData chainPhysics, KawaiiPhysicsPortOptions options)
     {
-        if (!options.ClearCurveData) return;
+        if (options.ClearCurveData)
+        {
+            Remove(chainPhysics,
+                "LimitLinearCurveData",
+                "GravityCurveData",
+                "DampingCurveData",
+                "StiffnessCurveData",
+                "WorldDampingLocationCurveData",
+                "WorldDampingRotationCurveData",
+                "RadiusCurveData",
+                "LimitAngleCurveData");
+        }
 
-        Remove(chainPhysics,
-            "LimitLinearCurveData",
-            "GravityCurveData",
-            "DampingCurveData",
-            "StiffnessCurveData",
-            "WorldDampingLocationCurveData",
-            "WorldDampingRotationCurveData",
-            "RadiusCurveData",
-            "LimitAngleCurveData");
+        if (options.CurveOverrides == null) return;
+
+        foreach (var curve in options.CurveOverrides)
+        {
+            string curveName = NormalizeCurveName(curve.Key);
+            if (curveName == null) continue;
+            SetRuntimeFloatCurve(asset, chainPhysics, curveName, curve.Value);
+        }
     }
 
     private static void ApplyExternalForceOptions(UAsset asset, StructPropertyData externalForceSettings, KawaiiPhysicsPortOptions options)
@@ -511,6 +529,115 @@ public static class KawaiiPhysicsLegacyPorter
         }
 
         Set(property, name, new VectorPropertyData(Name(asset, name)) { Value = value });
+    }
+
+    private static string NormalizeCurveName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+
+        string normalized = name.Trim()
+            .Replace("_", string.Empty, StringComparison.Ordinal)
+            .Replace("-", string.Empty, StringComparison.Ordinal)
+            .Replace(" ", string.Empty, StringComparison.Ordinal)
+            .ToLowerInvariant();
+
+        return normalized switch
+        {
+            "limitlinear" or "limitlinearcurvedata" => "LimitLinearCurveData",
+            "gravity" or "gravitycurvedata" => "GravityCurveData",
+            "damping" or "dampingcurvedata" => "DampingCurveData",
+            "stiffness" or "stiffnesscurvedata" => "StiffnessCurveData",
+            "worlddampinglocation" or "worlddampinglocationcurvedata" => "WorldDampingLocationCurveData",
+            "worlddampingrotation" or "worlddampingrotationcurvedata" => "WorldDampingRotationCurveData",
+            "radius" or "radiuscurvedata" => "RadiusCurveData",
+            "limitangle" or "limitanglecurvedata" => "LimitAngleCurveData",
+            _ => null
+        };
+    }
+
+    private static void SetRuntimeFloatCurve(
+        UAsset asset,
+        StructPropertyData parent,
+        string curveName,
+        IReadOnlyList<KawaiiPhysicsCurvePoint> points)
+    {
+        StructPropertyData curve;
+        if (Get(parent, curveName) is StructPropertyData existingCurve)
+        {
+            curve = existingCurve;
+            curve.Name = Name(asset, curveName);
+            curve.Value ??= new List<PropertyData>();
+        }
+        else
+        {
+            curve = Struct(asset, curveName, "RuntimeFloatCurve");
+            Set(parent, curveName, curve);
+        }
+
+        StructPropertyData editorCurve;
+        if (Get(curve, "EditorCurveData") is StructPropertyData existingEditorCurve)
+        {
+            editorCurve = existingEditorCurve;
+            editorCurve.Name = Name(asset, "EditorCurveData");
+            editorCurve.Value ??= new List<PropertyData>();
+        }
+        else
+        {
+            editorCurve = Struct(asset, "EditorCurveData", "RichCurve");
+            Set(curve, "EditorCurveData", editorCurve);
+        }
+
+        SetRichCurveKeys(asset, editorCurve, points);
+    }
+
+    private static void SetRichCurveKeys(
+        UAsset asset,
+        StructPropertyData richCurve,
+        IReadOnlyList<KawaiiPhysicsCurvePoint> points)
+    {
+        var sorted = new List<KawaiiPhysicsCurvePoint>();
+        if (points != null)
+        {
+            foreach (var point in points)
+            {
+                if (float.IsNaN(point.Time) || float.IsInfinity(point.Time)) continue;
+                if (float.IsNaN(point.Value) || float.IsInfinity(point.Value)) continue;
+                sorted.Add(new KawaiiPhysicsCurvePoint
+                {
+                    Time = Math.Clamp(point.Time, 0.0f, 1.0f),
+                    Value = point.Value
+                });
+            }
+        }
+        sorted.Sort((left, right) => left.Time.CompareTo(right.Time));
+
+        var keyValues = new PropertyData[sorted.Count];
+        for (int i = 0; i < sorted.Count; i++)
+        {
+            var point = sorted[i];
+            keyValues[i] = new RichCurveKeyPropertyData(Name(asset, i.ToString()))
+            {
+                Value = new FRichCurveKey(
+                    ERichCurveInterpMode.RCIM_Linear,
+                    ERichCurveTangentMode.RCTM_Auto,
+                    ERichCurveTangentWeightMode.RCTWM_WeightedNone,
+                    point.Time,
+                    point.Value,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    0.0f)
+            };
+        }
+
+        var keys = new ArrayPropertyData(Name(asset, "Keys"))
+        {
+            ArrayType = Name(asset, "StructProperty"),
+            DummyStruct = Struct(asset, "Keys", "RichCurveKey"),
+            Value = keyValues
+        };
+
+        Set(richCurve, "Keys", keys);
     }
 
     private static void SetEmptyArray(UAsset asset, StructPropertyData property, string name, string arrayType, string structType = null)

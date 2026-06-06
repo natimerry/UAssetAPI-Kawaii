@@ -155,6 +155,7 @@ public static class HiddenMaterialsReader
     private static bool LooksLikeCarrierClass(string className)
     {
         return className.Contains("MaterialTagAssetUserData", StringComparison.OrdinalIgnoreCase) ||
+               className.Contains("HiddenMaterialsAssetUserData", StringComparison.OrdinalIgnoreCase) ||
                className.Contains("RivalsMeshData", StringComparison.OrdinalIgnoreCase) ||
                className.Contains("RivalsLODHiddenMaterialsData", StringComparison.OrdinalIgnoreCase);
     }
@@ -272,6 +273,10 @@ public static class HiddenMaterialsReader
                     if (arrayProperty.Value[i] is BoolPropertyData boolProperty)
                     {
                         output[i] = boolProperty.Value;
+                    }
+                    else if (arrayProperty.Value[i] is BytePropertyData byteProperty)
+                    {
+                        output[i] = byteProperty.Value != 0;
                     }
                 }
 

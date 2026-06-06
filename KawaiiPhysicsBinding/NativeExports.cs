@@ -23,6 +23,7 @@ public static unsafe class NativeExports
         int forceRebuild,
         int portKawaiiPhysics,
         byte* defaultHiddenMaterialBitmapsUtf8,
+        byte* editOptionsJsonUtf8,
         KawaiiPhysicsPortNativeResult* result,
         byte* errorBuffer,
         int errorBufferLength)
@@ -51,6 +52,7 @@ public static unsafe class NativeExports
                         KawaiiPhysicsBridge.ParseDefaultHiddenMaterialBitmaps(defaultHiddenMaterialBitmaps);
                 }
             }
+            KawaiiPhysicsBridge.ApplyOptionsJson(options, PtrToString(editOptionsJsonUtf8));
 
             var portResult = KawaiiPhysicsBridge.PortAsset(
                 PtrToString(usmapPathUtf8),

@@ -23,10 +23,11 @@ internal static class Program
     private static int Usage()
     {
         Console.Error.WriteLine("Usage:");
-        Console.Error.WriteLine("  KawaiiPhysicsBinding port [usmap_path] <uasset_path> [--force-rebuild] [--patch-default-hidden-mats [bitmap_csv]]");
-        Console.Error.WriteLine("  KawaiiPhysicsBinding port <uasset_path> [--force-rebuild] [--patch-default-hidden-mats [bitmap_csv]]");
+        Console.Error.WriteLine("  KawaiiPhysicsBinding port [usmap_path] <uasset_path> [--force-rebuild] [--patch-default-hidden-mats [bitmap_csv]] [--options-json JSON]");
+        Console.Error.WriteLine("  KawaiiPhysicsBinding port <uasset_path> [--force-rebuild] [--patch-default-hidden-mats [bitmap_csv]] [--options-json JSON]");
         Console.Error.WriteLine("    --patch-default-hidden-mats reads LODHiddenMaterials carrier data.");
         Console.Error.WriteLine("    bitmap_csv or --default-hidden-material-bitmaps overrides carrier data.");
+        Console.Error.WriteLine("    --options-json or --options-json-file applies Kawaii value and curve edits.");
         return 2;
     }
 
@@ -75,6 +76,27 @@ internal static class Program
 
                         options.PatchDefaultHiddenMaterials = true;
                         options.DefaultHiddenMaterialBitmaps = KawaiiPhysicsBridge.ParseDefaultHiddenMaterialBitmaps(args[++i]);
+                        break;
+
+                    case "--options-json":
+                        if (i + 1 >= args.Length)
+                        {
+                            Console.Error.WriteLine($"[KawaiiPhysicsBinding] Missing value for {arg}");
+                            return 2;
+                        }
+
+                        KawaiiPhysicsBridge.ApplyOptionsJson(options, args[++i]);
+                        break;
+
+                    case "--options-json-file":
+                        if (i + 1 >= args.Length)
+                        {
+                            Console.Error.WriteLine($"[KawaiiPhysicsBinding] Missing value for {arg}");
+                            return 2;
+                        }
+
+                        string optionsPath = args[++i];
+                        KawaiiPhysicsBridge.ApplyOptionsJson(options, File.ReadAllText(optionsPath));
                         break;
 
                     default:
